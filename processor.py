@@ -1,34 +1,41 @@
 import json
-import logging
+from typing import Any, Dict, List, Optional
 
-class DataProcessor:
-    def __init__(self, data):
-        self.data = data
-        self.logger = logging.getLogger(__name__)
 
-    def validate_data(self):
-        if not isinstance(self.data, dict):
-            self.logger.error('Data must be a dictionary')
-            return False
-        if 'timestamp' not in self.data:
-            self.logger.error('Missing timestamp in data')
-            return False
-        return True
+def clean_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove keys with null values and strip string whitespace."""
+    cleaned = {}
+    for key, value in record.items():
+        if value is None:
+            continue
+        if isinstance(value, str):
+            cleaned[key] = value.strip()
+        elif isinstance(value, dict):
+            cleaned[key] = clean_record(value)
+        else:
+            cleaned[key] = value
+    return cleaned
 
-    def process_data(self):
-        if not self.validate_data():
-            return {'error': 'Invalid data'}
-        try:
-            # Simulate processing
-            result = {'status': 'processed', 'original_data': self.data}
-            return result
-        except Exception as e:
-            self.logger.exception('Error processing data')
-            return {'error': str(e)}
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    sample_data = {'timestamp': '2023-10-01T12:00:00'}
-    processor = DataProcessor(sample_data)
-    response = processor.process_data()
-    print(json.dumps(response, indent=2))
+def batch_process_data(raw_data: List[Dict[str, Any]], batch_size: int = 100) -> List[Dict[str, Any]]:
+    """Process raw data in batches, cleaning each record."""
+    if batch_size <= 0:
+        raise ValueError("Batch size must be greater than zero")
+    
+    processed_results = []
+    for i in range(0, len(raw_data), batch_size):
+        batch = raw_data[i:i + batch_size]
+        for item in batch:
+            try:
+                processed_results.append(clean_record(item))
+            except Exception as e:
+                # Skip malformed records during batch processing
+                continue
+                
+    return processed_results
+
+
+def export_to_json(data: List[Dict[str, Any]], file_path: str) -> None:
+    """Serialize processed data directly to a JSON file."""
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
