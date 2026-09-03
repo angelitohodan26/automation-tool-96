@@ -1,44 +1,46 @@
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import logging.handlers
+import queue
+import atexit
+import sys
 
-def setup_logger(
-    name="automation-tool-96",
-    log_dir="logs",
-    log_file="app.log",
-    max_bytes=5 * 1024 * 1024,  # 5 MB per file
-    backup_count=3,
-    level=logging.INFO
-):
-    """Configure logger with rotating file handler and console output."""
-    # Ensure log directory exists
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
-    log_filepath = log_path / log_file
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    # Clear existing handlers to prevent duplicate logs
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    # Set up rotating file handler
-    file_handler = RotatingFileHandler(
-        filename=str(log_filepath),
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8"
-    )
-    file_handler.setLevel(level)
-    # Set up console handler for real-time output
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    # Define log format
-    formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-    # Attach handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    return logger
+class NonBlockingLogger:
+    """High-performance non-blocking logger using queue handler."""
+    
+    def __init__(self, name: str = "automation_tool", level: int = logging.INFO):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(level)
+        self.logger.propagate = False
+        
+        self._queue = queue.Queue(-1)
+        self._queue_handler = logging.handlers.QueueHandler(self._queue)
+        self.logger.addHandler(self._queue_handler)
+        
+        stream_handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        stream_handler.setFormatter(formatter)
+        
+        self._listener = logging.handlers.QueueListener(
+            self._queue, 
+            stream_handler,
+            respect_handler_level=True
+        )
+        self._listener.start()
+        atexit.register(self.cleanup)
+
+    def cleanup(self) -> None:
+        """Flush remaining log entries and stop listener thread."""
+        if hasattr(self, '_listener') and self._listener:
+            self._listener.stop()
+
+    def get_logger(self) -> logging.Logger:
+        return self.logger
+
+
+def get_optimized_logger(name: str = "core") -> logging.Logger:
+    """Factory function for non-blocking logger instance."""
+    instance = NonBlockingLogger(name)
+    return instance.get_logger()
