@@ -1,34 +1,47 @@
+import functools
 import time
-import random
-import logging
-from typing import Callable, TypeVar
+from typing import Any, Callable, Dict, Tuple
 
-T = TypeVar('T')
-logger = logging.getLogger(__name__)
+class PerformanceCache:
+    """A high-performance in-memory cache with Time-To-Live (TTL) support."""
+    
+    def __init__(self, default_ttl: float = 300.0):
+        self.default_ttl = default_ttl
+        self._cache: Dict[Any, Tuple[Any, float]] = {}
 
-def retry_operation(
-    func: Callable[[], T],
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    backoff_factor: float = 2.0,
-    exceptions: tuple = (Exception,)
-) -> T:
-    """
-    Retries a function call with exponential backoff.
-    """
-    delay = initial_delay
-    for attempt in range(1, max_retries + 1):
-        try:
-            return func()
-        except exceptions as e:
-            if attempt == max_retries:
-                logger.error(f"Failed after {max_retries} attempts: {e}")
-                raise e
-            
-            jitter = random.uniform(0, 0.1 * delay)
-            sleep_time = delay + jitter
-            logger.warning(
-                f"Attempt {attempt} failed: {e}. Retrying in {sleep_time:.2f} seconds..."
-            )
-            time.sleep(sleep_time)
-            delay *= backoff_factor
+    def get(self, key: Any) -> Any:
+        """Retrieve an item from the cache if it has not expired."""
+        if key not in self._cache:
+            return None
+        value, expiry = self._cache[key]
+        if time.time() > expiry:
+            del self._cache[key]
+            return None
+        return value
+
+    def set(self, key: Any, value: Any, ttl: float = None) -> None:
+        """Store an item in the cache with an optional TTL."""
+        duration = ttl if ttl is not None else self.default_ttl
+        expiry = time.time() + duration
+        self._cache[key] = (value, expiry)
+
+    def clear(self) -> None:
+        """Clear all cached items."""
+        self._cache.clear()
+
+def memoize(ttl: float = 300.0):
+    """Decorator to cache function results with TTL."""
+    cache = PerformanceCache(default_ttl=ttl)
+    
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            cached_result = cache.get(key)
+            if cached_result is not None:
+                return cached_result
+            result = func(*args, **kwargs)
+            cache.set(key, result)
+            return result
+        return wrapper
+    return decorator
