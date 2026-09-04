@@ -1,38 +1,40 @@
-import json
+import time
+import functools
 import logging
-from typing import Any, Dict, Optional
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class AutomationError(Exception):
-    """Custom exception for automation tool failures."""
-    pass
+def retry(max_attempts=3, delay=2, backoff=2, exceptions=(Exception,)): 
+    """Decorator to implement exponential backoff retry logic."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            current_delay = delay
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        logger.error(f"Failed after {max_attempts} attempts: {e}")
+                        raise
+                    
+                    logger.warning(f"Attempt {attempts} failed, retrying in {current_delay}s...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
 
-def process_payload(raw_data: Optional[str]) -> Dict[str, Any]:
-    """Process and validate incoming automation payload with edge case handling."""
-    if raw_data is None:
-        logger.warning("Received null payload")
-        raise AutomationError("Payload cannot be None")
-    
-    if not isinstance(raw_data, str):
-        logger.error("Invalid payload type: %s", type(raw_data))
-        raise TypeError("Payload must be a string representation of JSON")
-    
-    stripped_data = raw_data.strip()
-    if not stripped_data:
-        logger.warning("Received empty payload string")
-        return {"status": "empty", "data": {}}
-    
+@retry(max_attempts=3, delay=1)
+def fetch_network_resource(url):
+    """Example network operation function."""
+    # Simulation of a network call
+    print(f"Fetching from {url}...")
+    raise ConnectionError("Server unreachable")
+
+if __name__ == "__main__":
     try:
-        parsed_data = json.loads(stripped_data)
-    except json.JSONDecodeError as exc:
-        logger.exception("Failed to parse JSON payload")
-        raise AutomationError(f"Malformed JSON input: {exc}") from exc
-    
-    if not isinstance(parsed_data, dict):
-        logger.error("Parsed payload is not a dictionary: %s", type(parsed_data))
-        raise AutomationError("Root JSON structure must be an object/dictionary")
-    
-    logger.info("Payload successfully processed and validated")
-    return {"status": "success", "data": parsed_data}
+        fetch_network_resource("https://api.example.com")
+    except Exception:
+        print("Operation exhausted all retries.")
