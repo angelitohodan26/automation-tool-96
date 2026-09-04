@@ -1,63 +1,36 @@
-"""General data handling utilities."""
+import logging
+from typing import Dict, Any, Optional
 
-import json
-from typing import Any, Dict, List, Union
+# Configure structured logging for automation flow
+logger = logging.getLogger('automation-tool-96')
 
-def flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
-    """Flatten a nested dictionary. Handles dicts and lists."""
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        elif isinstance(v, list):
-            for i, item in enumerate(v):
-                if isinstance(item, dict):
-                    items.extend(flatten_dict(item, f"{new_key}[{i}]", sep=sep).items())
-                else:
-                    items.append((f"{new_key}[{i}]", item))
-        else:
-            items.append((new_key, v))
-    return dict(items)
+class AutomationHandler:
+    """Manages execution tasks and state persistence."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.task_registry = {}
 
-def unflatten_dict(flat_dict: Dict[str, Any], sep: str = '.') -> Dict[str, Any]:
-    """Unflatten a dictionary to nested structure."""
-    result = {}
-    for key, value in flat_dict.items():
-        parts = key.split(sep)
-        current = result
-        for part in parts[:-1]:
-            if part not in current:
-                current[part] = {}
-            current = current[part]
-        current[parts[-1]] = value
-    return result
+    def register_task(self, name: str, task_func: callable) -> None:
+        """Register a task for later execution."""
+        if name not in self.task_registry:
+            self.task_registry[name] = task_func
+            logger.debug(f"Task {name} registered successfully")
 
-def clean_data(data: Any) -> Any:
-    """Remove None and empty strings from data structures."""
-    if isinstance(data, dict):
-        return {k: clean_data(v) for k, v in data.items() if v is not None and v != ""}
-    elif isinstance(data, list):
-        return [clean_data(item) for item in data if item is not None and item != ""]
-    return data
-
-def handle_data(data: Union[Dict[str, Any], List[Any], str], operation: str = 'flatten', **kwargs) -> Any:
-    """Utility function for general data handling.
-    Available operations: flatten, unflatten, clean, to_json.
-    """
-    if isinstance(data, str):
+    def execute(self, task_name: str, *args, **kwargs) -> Optional[Any]:
+        """Run a registered task with error handling."""
+        task = self.task_registry.get(task_name)
+        if not task:
+            logger.error(f"Task {task_name} not found")
+            return None
+        
         try:
-            data = json.loads(data)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    if operation == 'flatten' and isinstance(data, dict):
-        return flatten_dict(data, **kwargs)
-    elif operation == 'flatten' and isinstance(data, list):
-        return [flatten_dict(d) if isinstance(d, dict) else d for d in data]
-    elif operation == 'unflatten' and isinstance(data, dict):
-        return unflatten_dict(data, **kwargs)
-    elif operation == 'clean':
-        return clean_data(data)
-    elif operation == 'to_json':
-        return json.dumps(data, indent=2)
-    return data
+            return task(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Task {task_name} failed: {str(e)}")
+            raise
+
+    def cleanup(self) -> None:
+        """Clear internal state and task registry."""
+        self.task_registry.clear()
+        logger.info("Handler resources released")
