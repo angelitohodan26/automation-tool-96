@@ -1,40 +1,40 @@
-import time
 import functools
+import time
 import logging
+from typing import Callable, Any
 
-logger = logging.getLogger(__name__)
+# configure logging for performance metrics
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('core-performance')
 
-def retry(max_attempts=3, delay=2, backoff=2, exceptions=(Exception,)): 
-    """Decorator to implement exponential backoff retry logic."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            current_delay = delay
-            while attempts < max_attempts:
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
-                        logger.error(f"Failed after {max_attempts} attempts: {e}")
-                        raise
-                    
-                    logger.warning(f"Attempt {attempts} failed, retrying in {current_delay}s...")
-                    time.sleep(current_delay)
-                    current_delay *= backoff
-        return wrapper
-    return decorator
+# thread-safe lru cache for repetitive calculations
+CACHE_SIZE = 128
 
-@retry(max_attempts=3, delay=1)
-def fetch_network_resource(url):
-    """Example network operation function."""
-    # Simulation of a network call
-    print(f"Fetching from {url}...")
-    raise ConnectionError("Server unreachable")
+def memoize_performance(func: Callable) -> Callable:
+    """decorator for caching expensive computation results."""
+    @functools.lru_cache(maxsize=CACHE_SIZE)
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
 
-if __name__ == "__main__":
-    try:
-        fetch_network_resource("https://api.example.com")
-    except Exception:
-        print("Operation exhausted all retries.")
+class DataProcessor:
+    def __init__(self):
+        self.metrics = {}
+
+    @memoize_performance
+    def transform_dataset(self, data_hash: int, raw_data: tuple) -> list:
+        """optimizes data processing using cached state."""
+        start_time = time.perf_counter()
+        
+        # simulate complex transformation logic
+        processed = [x * 2 for x in raw_data]
+        
+        duration = time.perf_counter() - start_time
+        self.metrics[data_hash] = duration
+        return processed
+
+    def clear_cache(self):
+        """resets cache to free up memory."""
+        self.transform_dataset.cache_clear()
+        logger.info("cache cleared successfully")
