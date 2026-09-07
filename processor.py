@@ -1,37 +1,46 @@
-import re
-from typing import List, Dict, Any, Optional
+import collections
+from typing import Dict, Any, Union, List
 
-class DataProcessor:
-    """Processes and normalizes raw dataset records for downstream automation tasks."""
+def flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '_') -> Dict[str, Any]:
+    """
+    Recursively flattens a nested dictionary structure into a single level.
+    Useful for processing nested API payloads or configuration files.
+    """
+    items: List[tuple] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                list_key = f"{new_key}{sep}{i}"
+                if isinstance(item, dict):
+                    items.extend(flatten_dict(item, list_key, sep=sep).items())
+                else:
+                    items.append((list_key, item))
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
-    def __init__(self, default_value: Optional[Any] = None):
-        self.default_value = default_value
-        # Compile regex pattern to strip non-alphanumeric characters
-        self._clean_pattern = re.compile(r'[^\w\s\-\.\,]')
-
-    def clean_string(self, value: str) -> str:
-        """Removes unwanted special characters and normalizes whitespace."""
-        if not isinstance(value, str):
-            return str(value)
-        # Remove special characters except common punctuation
-        cleaned = self._clean_pattern.sub("", value)
-        # Collapse multiple whitespaces into a single space and strip
-        return " ".join(cleaned.split())
-
-    def process_record(self, record: Dict[str, Any], fields_to_clean: List[str]) -> Dict[str, Any]:
-        """Cleans specified string fields within a single record dict."""
-        processed = record.copy()
-        for key, val in processed.items():
-            if key in fields_to_clean and isinstance(val, str):
-                processed[key] = self.clean_string(val)
-        return processed
-
-    def batch_process(self, records: List[Dict[str, Any]], target_fields: List[str]) -> List[Dict[str, Any]]:
-        """Filters out invalid records and cleans target fields in batch."""
-        results = []
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-            cleaned_record = self.process_record(record, target_fields)
-            results.append(cleaned_record)
-        return results
+def clean_empty_values(data: Union[Dict[str, Any], List[Any]]) -> Union[Dict[str, Any], List[Any], None]:
+    """
+    Recursively strips out None, empty strings, empty dicts, and empty lists
+    to clean up raw data payloads before sending or saving.
+    """
+    if isinstance(data, dict):
+        cleaned_dict = {}
+        for k, v in data.items():
+            if v is not None and v != "" and v != {} and v != []:
+                cleaned_val = clean_empty_values(v)
+                if cleaned_val is not None and cleaned_val != {} and cleaned_val != []:
+                    cleaned_dict[k] = cleaned_val
+        return cleaned_dict
+    elif isinstance(data, list):
+        cleaned_list = []
+        for item in data:
+            if item is not None and item != "" and item != {} and item != []:
+                cleaned_val = clean_empty_values(item)
+                if cleaned_val is not None and cleaned_val != {} and cleaned_val != []:
+                    cleaned_list.append(cleaned_val)
+        return cleaned_list
+    return data
