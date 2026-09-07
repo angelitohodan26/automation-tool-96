@@ -1,41 +1,37 @@
-import json
 import os
-from typing import Any, Dict, Optional
+import logging
+from typing import Any, Optional
 
-class ConfigurationLoader:
-    """Loads configuration with support for defaults and file overrides."""
+logger = logging.getLogger(__name__)
 
-    def __init__(self, default_config: Optional[Dict[str, Any]] = None) -> None:
-        """Initialize with optional default configuration."""
-        self.default_config: Dict[str, Any] = default_config or {}
-        self.config: Dict[str, Any] = self.default_config.copy()
+class ConfigError(Exception):
+    """Custom exception for configuration failures."""
+    pass
 
-    def load_from_file(self, filepath: str) -> Dict[str, Any]:
-        """Load configuration from a JSON file and merge with defaults."""
-        if not os.path.isfile(filepath):
-            return self.config
+def get_env_variable(key: str, default: Optional[Any] = None) -> Any:
+    """Retrieves environment variables with validation and fallback."""
+    try:
+        value = os.getenv(key)
+        if value is None:
+            if default is not None:
+                return default
+            raise ConfigError(f"Missing required environment variable: {key}")
+        return value
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving config {key}: {str(e)}")
+        raise ConfigError(f"Failed to load config for {key}") from e
 
-        try:
-            with open(filepath, 'r', encoding='utf-8') as config_file:
-                file_config: Dict[str, Any] = json.load(config_file)
-            if isinstance(file_config, dict):
-                self.config.update(file_config)
-
-        except (json.JSONDecodeError, IOError, OSError) as error:
-            print(f"Warning: Could not load config from {filepath}: {error}")
-
-        return self.config
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get a configuration value, falling back to defaults if needed."""
-        return self.config.get(key, default)
-
-    def get_all(self) -> Dict[str, Any]:
-        """Return the full configuration dictionary."""
-        return self.config.copy()
-
-    def set_default(self, key: str, value: Any) -> None:
-        """Set or update a default value."""
-        self.default_config[key] = value
-        if key not in self.config:
-            self.config[key] = value
+def load_app_settings() -> dict:
+    """Safely loads application configuration settings."""
+    try:
+        return {
+            "api_key": get_env_variable("API_KEY"),
+            "timeout": int(get_env_variable("TIMEOUT", 30)),
+            "debug": get_env_variable("DEBUG", "false").lower() == "true"
+        }
+    except (ValueError, TypeError) as e:
+        logger.error(f"Invalid configuration format: {e}")
+        return {"api_key": None, "timeout": 30, "debug": False}
+    except ConfigError as e:
+        logger.critical(f"Application startup aborted: {e}")
+        raise
