@@ -1,34 +1,43 @@
-import logging
-import sys
-from typing import Any, Callable, TypeVar
+from typing import List, Dict, Any, Optional
+import json
+import os
 
-logger = logging.getLogger("automation-tool-96")
-T = TypeVar('T')
+def load_json_config(file_path: str) -> Dict[str, Any]:
+    """Loads a JSON configuration file from the filesystem.
 
-def safe_execute(func: Callable[..., T], *args: Any, **kwargs: Any) -> T | None:
-    """Execute a function with robust error handling for edge cases."""
-    try:
-        return func(*args, **kwargs)
-    except ValueError as val_err:
-        logger.error(f"Invalid value encountered in {func.__name__}: {val_err}")
-    except TypeError as type_err:
-        logger.error(f"Type mismatch in {func.__name__}: {type_err}")
-    except ZeroDivisionError:
-        logger.error(f"Mathematical error (division by zero) in {func.__name__}")
-    except Exception as exc:
-        logger.critical(f"Unexpected error in {func.__name__}: {exc}", exc_info=True)
-        raise
-    return None
+    Args:
+        file_path: The path to the JSON file.
 
-def validate_payload(data: dict[str, Any] | None) -> bool:
-    """Ensure payload is not None and contains necessary structure."""
-    if data is None:
-        logger.warning("Payload validation failed: data is None")
-        return False
-    if not isinstance(data, dict):
-        logger.warning(f"Payload validation failed: expected dict, got {type(data).__name__}")
-        return False
-    if not data:
-        logger.warning("Payload validation failed: dictionary is empty")
-        return False
-    return True
+    Returns:
+        A dictionary containing the configuration data.
+    """
+    if not os.path.exists(file_path):
+        return {}
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return dict(json.load(f))
+
+def format_payload(data: List[Any], prefix: Optional[str] = None) -> str:
+    """Formats a list of data into a string with an optional prefix.
+
+    Args:
+        data: A list of items to be stringified.
+        prefix: An optional string to prepend to the result.
+
+    Returns:
+        A formatted string representation.
+    """
+    items: List[str] = [str(item) for item in data]
+    content: str = ", ".join(items)
+    return f"{prefix}: {content}" if prefix else content
+
+def validate_environment_keys(required_keys: List[str]) -> bool:
+    """Checks if all required environment variables are present.
+
+    Args:
+        required_keys: A list of environment variable names.
+
+    Returns:
+        True if all keys are present, False otherwise.
+    """
+    return all(key in os.environ for key in required_keys)
