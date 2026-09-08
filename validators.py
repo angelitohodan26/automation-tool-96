@@ -1,45 +1,26 @@
-import logging
+import re
+import os
 
-logger = logging.getLogger(__name__)
+def is_valid_email(email: str) -> bool:
+    """Validate email address format using regex."""
+    pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    return bool(re.match(pattern, email))
 
-class InputValidationError(Exception):
-    """Raised when input data fails validation checks."""
-    pass
+def is_valid_file_path(path: str) -> bool:
+    """Verify file exists and is accessible."""
+    return os.path.isfile(path) and os.access(path, os.R_OK)
 
-def validate_task_payload(payload: dict) -> bool:
-    """
-    Validates the structure and data types of an incoming task payload.
-    
-    Args:
-        payload (dict): The task dictionary to validate.
-        
-    Returns:
-        bool: True if validation passes.
-        
-    Raises:
-        InputValidationError: If required fields are missing or invalid.
-    """
-    if not isinstance(payload, dict):
-        logger.error("Payload is not a dictionary: %s", type(payload))
-        raise InputValidationError("Payload must be a dictionary")
+def sanitize_input(value: str) -> str:
+    """Strip whitespace and prevent basic injection characters."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    return re.sub(r'[;<>"\\'&]', '', cleaned)
 
-    required_fields = {"task_id": str, "action": str, "params": dict}
-    
-    for field, expected_type in required_fields.items():
-        if field not in payload:
-            logger.error("Missing required field in payload: %s", field)
-            raise InputValidationError(f"Missing required field: '{field}'")
-            
-        if not isinstance(payload[field], expected_type):
-            logger.error(
-                "Invalid type for field '%s'. Expected %s, got %s",
-                field,
-                expected_type.__name__,
-                type(payload[field]).__name__
-            )
-            raise InputValidationError(
-                f"Field '{field}' must be of type {expected_type.__name__}"
-            )
+def validate_numeric_range(value: int, min_val: int, max_val: int) -> bool:
+    """Check if integer falls within specific bounds."""
+    return min_val <= value <= max_val
 
-    logger.debug("Payload validation successful for task: %s", payload.get("task_id"))
-    return True
+def is_empty_string(value: str) -> bool:
+    """Check if string is null or whitespace only."""
+    return not (value and value.strip())
