@@ -1,37 +1,72 @@
+import json
 import os
-import logging
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "app_name": "automation-tool-96",
+    "version": "1.0.0",
+    "debug": False,
+    "log_level": "INFO",
+    "max_retries": 3,
+    "timeout": 30,
+    "storage": {
+        "path": "./data",
+        "auto_clean": True
+    }
+}
 
-class ConfigError(Exception):
-    """Custom exception for configuration failures."""
-    pass
 
-def get_env_variable(key: str, default: Optional[Any] = None) -> Any:
-    """Retrieves environment variables with validation and fallback."""
-    try:
-        value = os.getenv(key)
-        if value is None:
-            if default is not None:
+class ConfigLoader:
+    """Manages application configuration loading with default fallbacks."""
+
+    def __init__(self, config_path: Optional[str] = None):
+        self.config_path = Path(config_path) if config_path else None
+        self._config: Dict[str, Any] = {}
+        self.load()
+
+    def _merge_dicts(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively merge user overrides into default configuration."""
+        merged = base.copy()
+        for key, value in override.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = self._merge_dicts(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    def load(self) -> Dict[str, Any]:
+        """Load configuration from file and environment variables."""
+        config = DEFAULT_CONFIG.copy()
+
+        if self.config_path and self.config_path.exists():
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    file_config = json.load(f)
+                    config = self._merge_dicts(config, file_config)
+            except (json.JSONDecodeError, IOError) as err:
+                raise RuntimeError(f"Failed to load config file {self.config_path}: {err}")
+
+        # Override debug flag if environment variable is present
+        env_debug = os.getenv("AUTOMATION_DEBUG")
+        if env_debug is not None:
+            config["debug"] = env_debug.lower() in ("true", "1", "yes")
+
+        self._config = config
+        return self._config
+
+    def get(self, key_path: str, default: Any = None) -> Any:
+        """Retrieve value using dot-notation path (e.g. 'storage.path')."""
+        keys = key_path.split(".")
+        curr = self._config
+        for k in keys:
+            if isinstance(curr, dict) and k in curr:
+                curr = curr[k]
+            else:
                 return default
-            raise ConfigError(f"Missing required environment variable: {key}")
-        return value
-    except Exception as e:
-        logger.error(f"Unexpected error retrieving config {key}: {str(e)}")
-        raise ConfigError(f"Failed to load config for {key}") from e
+        return curr
 
-def load_app_settings() -> dict:
-    """Safely loads application configuration settings."""
-    try:
-        return {
-            "api_key": get_env_variable("API_KEY"),
-            "timeout": int(get_env_variable("TIMEOUT", 30)),
-            "debug": get_env_variable("DEBUG", "false").lower() == "true"
-        }
-    except (ValueError, TypeError) as e:
-        logger.error(f"Invalid configuration format: {e}")
-        return {"api_key": None, "timeout": 30, "debug": False}
-    except ConfigError as e:
-        logger.critical(f"Application startup aborted: {e}")
-        raise
+
+def load_config(file_path: Optional[str] = None) -> ConfigLoader:
+    """Helper function to initialize configuration loader."""
+    return ConfigLoader(file_path)
