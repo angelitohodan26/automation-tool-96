@@ -1,43 +1,39 @@
-from typing import List, Dict, Any, Optional
 import json
 import os
+from typing import Any, Dict, Optional
 
-def load_json_config(file_path: str) -> Dict[str, Any]:
-    """Loads a JSON configuration file from the filesystem.
-
-    Args:
-        file_path: The path to the JSON file.
-
-    Returns:
-        A dictionary containing the configuration data.
+def load_json_file(file_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Safely load and parse a JSON configuration file.
+    Returns None if file is missing or corrupted.
     """
     if not os.path.exists(file_path):
-        return {}
+        return None
     
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return dict(json.load(f))
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
 
-def format_payload(data: List[Any], prefix: Optional[str] = None) -> str:
-    """Formats a list of data into a string with an optional prefix.
-
-    Args:
-        data: A list of items to be stringified.
-        prefix: An optional string to prepend to the result.
-
-    Returns:
-        A formatted string representation.
+def sanitize_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    items: List[str] = [str(item) for item in data]
-    content: str = ", ".join(items)
-    return f"{prefix}: {content}" if prefix else content
-
-def validate_environment_keys(required_keys: List[str]) -> bool:
-    """Checks if all required environment variables are present.
-
-    Args:
-        required_keys: A list of environment variable names.
-
-    Returns:
-        True if all keys are present, False otherwise.
+    Remove null values from dictionary to clean payloads.
     """
-    return all(key in os.environ for key in required_keys)
+    return {k: v for k, v in data.items() if v is not None}
+
+def format_byte_size(size_bytes: int) -> str:
+    """
+    Convert raw bytes into a human readable string.
+    """
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.2f} TB"
+
+def get_env_var(key: str, default: str = "") -> str:
+    """
+    Retrieve environment variables with sensible defaults.
+    """
+    return os.environ.get(key, default)
