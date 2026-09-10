@@ -1,32 +1,63 @@
+"""Custom exception classes and error handling utilities for automation-tool-96."""
+
+from typing import Optional, Dict, Any
+
+
 class AutomationError(Exception):
-    """Base exception for all automation-tool-96 errors."""
-    pass
+    """Base exception class for all automation workflow errors."""
 
-class ConfigurationError(AutomationError):
-    """Raised when config files are missing or malformed."""
-    pass
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
 
-class ProcessingError(AutomationError):
-    """Raised when core logic fails during execution."""
-    pass
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize exception information into a dictionary format."""
+        return {
+            "error_type": self.__class__.__name__,
+            "message": self.message,
+            "details": self.details,
+        }
 
-class ValidationError(AutomationError):
-    """Raised when input data fails validation checks."""
-    pass
 
-def handle_exception(e: Exception) -> str:
-    """Format exception details for standardized logging."""
-    if isinstance(e, AutomationError):
-        return f"[{type(e).__name__}]: {str(e)}"
-    return f"[UnexpectedError]: {str(e)}"
+class TaskTimeoutError(AutomationError):
+    """Raised when an automated task exceeds its allocated execution time."""
 
-def raise_if_none(value, name: str):
-    """Helper to ensure required fields are not empty."""
-    if value is None:
-        raise ValidationError(f"Field '{name}' cannot be None")
+    def __init__(self, task_name: str, timeout_seconds: float):
+        message = f"Task '{task_name}' timed out after {timeout_seconds}s"
+        super().__init__(message, {"task_name": task_name, "timeout_seconds": timeout_seconds})
 
-def validate_path(path: str):
-    """Verify file system path existence for safety."""
-    import os
-    if not os.path.exists(path):
-        raise ConfigurationError(f"Path not found: {path}")
+
+class ResourceUnavailableError(AutomationError):
+    """Raised when a required system resource or service is missing."""
+
+    def __init__(self, resource_id: str, reason: str = "Not accessible"):
+        message = f"Resource '{resource_id}' is unavailable: {reason}"
+        super().__init__(message, {"resource_id": resource_id, "reason": reason})
+
+
+class InvalidPayloadError(AutomationError):
+    """Raised when task input data fails validation or structural checks."""
+
+    def __init__(self, payload_key: str, expected_type: str, actual_value: Any):
+        actual_type = type(actual_value).__name__
+        message = f"Invalid payload key '{payload_key}': expected {expected_type}, got {actual_type}"
+        super().__init__(
+            message,
+            {
+                "payload_key": payload_key,
+                "expected_type": expected_type,
+                "actual_value": str(actual_value),
+            },
+        )
+
+
+def format_edge_case_error(exc: Exception) -> Dict[str, Any]:
+    """Convert arbitrary exceptions into structured error payloads."""
+    if isinstance(exc, AutomationError):
+        return exc.to_dict()
+    return {
+        "error_type": "UnhandledEdgeCaseError",
+        "message": str(exc) or "An unexpected runtime error occurred",
+        "details": {"raw_type": type(exc).__name__},
+    }
