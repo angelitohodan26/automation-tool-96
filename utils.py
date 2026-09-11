@@ -1,39 +1,34 @@
-import json
-import os
-from typing import Any, Dict, Optional
+import time
+import random
+import logging
+from typing import Callable, Any, Type
 
-def load_json_file(file_path: str) -> Optional[Dict[str, Any]]:
-    """
-    Safely load and parse a JSON configuration file.
-    Returns None if file is missing or corrupted.
-    """
-    if not os.path.exists(file_path):
-        return None
+logger = logging.getLogger(__name__)
+
+def retry_network_operation(
+    func: Callable, 
+    max_retries: int = 3, 
+    backoff_factor: float = 1.0,
+    exceptions: tuple[Type[Exception], ...] = (Exception,)
+) -> Any:
+    """Executes a callable with exponential backoff strategy."""
+    last_exception = None
     
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return None
-
-def sanitize_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Remove null values from dictionary to clean payloads.
-    """
-    return {k: v for k, v in data.items() if v is not None}
-
-def format_byte_size(size_bytes: int) -> str:
-    """
-    Convert raw bytes into a human readable string.
-    """
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.2f} TB"
-
-def get_env_var(key: str, default: str = "") -> str:
-    """
-    Retrieve environment variables with sensible defaults.
-    """
-    return os.environ.get(key, default)
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except exceptions as e:
+            last_exception = e
+            wait_time = backoff_factor * (2 ** attempt) + random.uniform(0, 0.1)
+            
+            logger.warning(
+                f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time:.2f}s..."
+            )
+            
+            if attempt < max_retries - 1:
+                time.sleep(wait_time)
+            else:
+                break
+                
+    logger.error(f"Operation failed after {max_retries} attempts.")
+    raise last_exception
