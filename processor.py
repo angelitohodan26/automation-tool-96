@@ -1,46 +1,56 @@
-import collections
-from typing import Dict, Any, Union, List
+import logging
+from typing import Any, Dict, List
 
-def flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '_') -> Dict[str, Any]:
-    """
-    Recursively flattens a nested dictionary structure into a single level.
-    Useful for processing nested API payloads or configuration files.
-    """
-    items: List[tuple] = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        elif isinstance(v, list):
-            for i, item in enumerate(v):
-                list_key = f"{new_key}{sep}{i}"
-                if isinstance(item, dict):
-                    items.extend(flatten_dict(item, list_key, sep=sep).items())
-                else:
-                    items.append((list_key, item))
-        else:
-            items.append((new_key, v))
-    return dict(items)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def clean_empty_values(data: Union[Dict[str, Any], List[Any]]) -> Union[Dict[str, Any], List[Any], None]:
-    """
-    Recursively strips out None, empty strings, empty dicts, and empty lists
-    to clean up raw data payloads before sending or saving.
-    """
-    if isinstance(data, dict):
-        cleaned_dict = {}
-        for k, v in data.items():
-            if v is not None and v != "" and v != {} and v != []:
-                cleaned_val = clean_empty_values(v)
-                if cleaned_val is not None and cleaned_val != {} and cleaned_val != []:
-                    cleaned_dict[k] = cleaned_val
-        return cleaned_dict
-    elif isinstance(data, list):
-        cleaned_list = []
-        for item in data:
-            if item is not None and item != "" and item != {} and item != []:
-                cleaned_val = clean_empty_values(item)
-                if cleaned_val is not None and cleaned_val != {} and cleaned_val != []:
-                    cleaned_list.append(cleaned_val)
-        return cleaned_list
-    return data
+
+def validate_item(item: Dict[str, Any]) -> bool:
+    """Validate item payload before processing."""
+    if not isinstance(item, dict):
+        logging.warning(f"Invalid item format: expected dict, got {type(item).__name__}")
+        return False
+
+    required_keys = {"id", "action", "payload"}
+    missing_keys = required_keys - item.keys()
+    if missing_keys:
+        logging.warning(f"Item {item.get('id', 'unknown')} missing required keys: {missing_keys}")
+        return False
+
+    if not isinstance(item["id"], (int, str)) or not str(item["id"]).strip():
+        logging.warning("Item ID must be a non-empty string or integer")
+        return False
+
+    allowed_actions = {"transform", "filter", "export"}
+    if item["action"] not in allowed_actions:
+        logging.warning(f"Item {item['id']} has unsupported action: {item['action']}")
+        return False
+
+    return True
+
+
+def process_batch(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Main processing loop with input validation."""
+    stats = {"processed": 0, "skipped": 0, "failed": 0}
+
+    for idx, item in enumerate(items):
+        if not validate_item(item):
+            logging.error(f"Validation failed for item at index {idx}, skipping processing")
+            stats["skipped"] += 1
+            continue
+
+        try:
+            item_id = item["id"]
+            action = item["action"]
+            logging.info(f"Processing item {item_id} with action '{action}'")
+
+            if action == "transform":
+                _ = str(item["payload"]).strip().upper()
+            elif action == "filter":
+                _ = bool(item["payload"])
+
+            stats["processed"] += 1
+        except Exception as exc:
+            logging.error(f"Processing error on item {item.get('id')}: {exc}")
+            stats["failed"] += 1
+
+    return stats
