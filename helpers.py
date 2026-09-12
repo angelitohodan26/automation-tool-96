@@ -1,27 +1,46 @@
 import time
-import functools
-import logging
+from datetime import datetime, timezone
+from typing import Any, Callable, List, Dict, Optional, TypeVar
 
-logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
-def retry_network_operation(max_retries=3, delay=2, backoff=2):
-    """Decorator for retrying network operations with exponential backoff."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            current_delay = delay
-            last_exception = None
-            
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError) as e:
-                    last_exception = e
-                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {current_delay}s...")
-                    time.sleep(current_delay)
-                    current_delay *= backoff
-            
-            logger.error(f"Operation failed after {max_retries} attempts.")
-            raise last_exception
-        return wrapper
-    return decorator
+def retry_operation(
+    func: Callable[..., T],
+    max_attempts: int = 3,
+    delay: float = 1.0,
+    backoff_factor: float = 2.0,
+    *args: Any,
+    **kwargs: Any
+) -> Optional[T]:
+    """Retry a callable with exponential backoff if exceptions occur."""
+    current_delay = delay
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as err:
+            if attempt == max_attempts:
+                raise err
+            time.sleep(current_delay)
+            current_delay *= backoff_factor
+    return None
+
+def chunk_list(items: List[T], batch_size: int) -> List[List[T]]:
+    """Split a list into smaller chunks of specified batch size."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer")
+    return [items[i:i + batch_size] for i in range(0, len(items), batch_size)]
+
+def get_nested_key(data: Dict[str, Any], path: str, default: Any = None) -> Any:
+    """Extract a value from a nested dictionary using a dot-separated path."""
+    keys = path.split(".")
+    current = data
+    for key in keys:
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return default
+    return current
+
+def generate_timestamp(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Generate a current UTC timestamp formatted string."""
+    return datetime.now(timezone.utc).strftime(fmt)
