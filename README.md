@@ -1,18 +1,17 @@
 # automation-tool-96
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-automation-tool-96 is a lightweight Python tool for automating common file and process management tasks. It provides a simple interface to chain operations like backups, sorting, and cleanup into repeatable workflows.
+A high-performance Python automation framework designed to streamline repetitive terminal and filesystem tasks. It provides a modular architecture to help developers orchestrate complex workflows with minimal boilerplate.
 
 ## Features
-- Automated file sorting and archiving based on custom rules and patterns
-- Scheduled backups with incremental support and verification
-- System process monitoring with alert triggers on thresholds
-- Detailed execution reports and audit logs for compliance
+
+*   **Task Orchestrator:** Manage multiple asynchronous background processes with a unified thread-safe scheduler.
+*   **Smart Logging:** Automated, color-coded logging engine that outputs to both console and rotating log files for easy debugging.
+*   **Configuration Manager:** Native support for YAML-based environment configs, allowing for seamless transitions between dev, staging, and production profiles.
+*   **Resource Throttling:** Built-in rate limiting to ensure long-running automation tasks do not exceed CPU or memory thresholds.
 
 ## Installation
 
-Clone the repository and install dependencies:
+Ensure you have Python 3.8 or higher installed. Clone the repository and install the dependencies:
 
 ```bash
 git clone https://github.com/Developer/automation-tool-96.git
@@ -20,16 +19,27 @@ cd automation-tool-96
 pip install -r requirements.txt
 ```
 
-## Basic Usage
+## Usage
 
-Run a backup workflow from the command line:
+To run a defined automation sequence, use the CLI interface. You can specify a config file to dictate the task behavior:
 
 ```bash
-python -m automation_tool_96 --workflow backup --source /path/to/data --dest /backup/location
+python main.py --config configs/daily_tasks.yaml --verbose
 ```
 
-See the `examples/` directory for additional configuration templates.
+### Example snippet:
+```python
+from automator import TaskRunner
+
+# Initialize the engine
+engine = TaskRunner(config_path="configs/daily_tasks.yaml")
+
+# Execute automation
+engine.start()
+```
 
 ## License
 
-MIT License
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
