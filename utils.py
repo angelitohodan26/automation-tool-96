@@ -1,44 +1,34 @@
+import time
+import functools
 import logging
-from typing import Any, Callable, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("automation_tool_96")
 
-def safe_execute(func: Callable, *args: Any, **kwargs: Any) -> Optional[Any]:
+def retry(retries: int = 3, delay: float = 1.0, backoff: float = 2.0, exceptions: tuple = (Exception,)):
     """
-    Executes a function with broad error handling for edge cases.
-    Returns the result if successful, or None if an error occurs.
+    A decorator that retries a function upon encountering specified exceptions.
+    Uses exponential backoff for spacing out consecutive retries.
     """
-    try:
-        return func(*args, **kwargs)
-    except (ValueError, TypeError) as e:
-        logger.error(f"Invalid data input: {e}")
-    except PermissionError as e:
-        logger.error(f"Insufficient system permissions: {e}")
-    except Exception as e:
-        logger.critical(f"Unexpected automation failure: {e}")
-    return None
-
-def validate_input(data: Any, expected_type: type) -> bool:
-    """
-    Verifies that the provided input is not null and matches type.
-    """
-    if data is None:
-        logger.warning("Input validation failed: received None")
-        return False
-    if not isinstance(data, expected_type):
-        logger.warning(f"Input validation failed: expected {expected_type}, got {type(data)}")
-        return False
-    return True
-
-def retry_operation(func: Callable, retries: int = 3, *args: Any, **kwargs: Any) -> Any:
-    """
-    Attempt to execute an operation multiple times on transient failures.
-    """
-    last_exception = None
-    for attempt in range(retries):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            last_exception = e
-            logger.info(f"Retry {attempt + 1}/{retries} due to {e}")
-    raise last_exception if last_exception else RuntimeError("Operation failed")
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            current_delay = delay
+            for attempt in range(1, retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt == retries:
+                        logger.error(
+                            f"Function '{func.__name__}' failed after {retries} attempts. Error: {e}"
+                        )
+                        raise
+                    
+                    logger.warning(
+                        f"Attempt {attempt} failed for '{func.__name__}': {e}. "
+                        f"Retrying in {current_delay:.1f}s..."
+                    )
+                    time.sleep(current_delay)
+                    current_delay *= backoff
+            return None
+        return wrapper
+    return decorator
