@@ -1,34 +1,33 @@
-import time
-import functools
-import logging
+import json
+import os
+from datetime import datetime
+from typing import Any, Dict, Optional
 
-logger = logging.getLogger("automation_tool_96")
+def load_json_config(filepath: str) -> Dict[str, Any]:
+    """Loads and parses a configuration JSON file."""
+    if not os.path.exists(filepath):
+        return {}
+    with open(filepath, 'r') as f:
+        return json.load(f)
 
-def retry(retries: int = 3, delay: float = 1.0, backoff: float = 2.0, exceptions: tuple = (Exception,)):
-    """
-    A decorator that retries a function upon encountering specified exceptions.
-    Uses exponential backoff for spacing out consecutive retries.
-    """
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            current_delay = delay
-            for attempt in range(1, retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    if attempt == retries:
-                        logger.error(
-                            f"Function '{func.__name__}' failed after {retries} attempts. Error: {e}"
-                        )
-                        raise
-                    
-                    logger.warning(
-                        f"Attempt {attempt} failed for '{func.__name__}': {e}. "
-                        f"Retrying in {current_delay:.1f}s..."
-                    )
-                    time.sleep(current_delay)
-                    current_delay *= backoff
-            return None
-        return wrapper
-    return decorator
+def save_json_config(filepath: str, data: Dict[str, Any]) -> None:
+    """Writes data dictionary to a JSON file."""
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def get_timestamp_string() -> str:
+    """Returns current UTC timestamp in ISO format."""
+    return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+
+def ensure_directory_exists(path: str) -> None:
+    """Creates directory structure if missing."""
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+def format_byte_size(size_bytes: int) -> str:
+    """Converts raw bytes into human readable string."""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} TB"
