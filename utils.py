@@ -1,33 +1,35 @@
-import json
-import os
-from datetime import datetime
-from typing import Any, Dict, Optional
+import time
+import functools
+import logging
+from typing import Callable, Any
 
-def load_json_config(filepath: str) -> Dict[str, Any]:
-    """Loads and parses a configuration JSON file."""
-    if not os.path.exists(filepath):
-        return {}
-    with open(filepath, 'r') as f:
-        return json.load(f)
+# Configure logging for automation-tool-96
+logger = logging.getLogger(__name__)
 
-def save_json_config(filepath: str, data: Dict[str, Any]) -> None:
-    """Writes data dictionary to a JSON file."""
-    with open(filepath, 'w') as f:
-        json.dump(data, f, indent=4)
+def retry_operation(retries: int = 3, delay: float = 1.0):
+    """Decorator for retrying network operations on failure."""
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_exception = None
+            for attempt in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                    if attempt < retries - 1:
+                        time.sleep(delay * (2 ** attempt))  # Exponential backoff
+            logger.error(f"Operation failed after {retries} attempts")
+            raise last_exception
+        return wrapper
+    return decorator
 
-def get_timestamp_string() -> str:
-    """Returns current UTC timestamp in ISO format."""
-    return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-
-def ensure_directory_exists(path: str) -> None:
-    """Creates directory structure if missing."""
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-def format_byte_size(size_bytes: int) -> str:
-    """Converts raw bytes into human readable string."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.2f} TB"
+@retry_operation(retries=3, delay=0.5)
+def fetch_network_data(url: str):
+    """Example of a network call decorated for retries."""
+    # Simulation of network operation logic
+    import random
+    if random.random() < 0.7:
+        raise ConnectionError("Failed to connect to host")
+    return {"status": "success", "url": url}
