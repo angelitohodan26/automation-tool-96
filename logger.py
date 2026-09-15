@@ -1,37 +1,39 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+from typing import Optional
 
-def setup_logger(name: str, log_file: str = 'automation.log', level: int = logging.INFO) -> logging.Logger:
-    """
-    Configures a rotating file logger for the automation tool.
-    """
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
+class AutomationLogger:
+    """Standardized logging utility for automation-tool-96."""
 
-    # Prevent duplicate handlers if re-initialized
-    if not logger.handlers:
-        # Format: timestamp - name - level - message
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-
-        # Rotation: 5MB per file, keep 3 backups
-        handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=5 * 1024 * 1024, 
-            backupCount=3
-        )
+    def __init__(self, name: str = "automation-tool"):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
+        
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        self.logger.addHandler(handler)
 
-        # Also output to console for real-time visibility
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        logger.addHandler(console)
+    def safe_log_execution(self, func, *args, **kwargs) -> Optional[any]:
+        """Executes a function with error catching and logging."""
+        try:
+            return func(*args, **kwargs)
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Invalid input provided: {e}")
+            return None
+        except ConnectionError as e:
+            self.logger.critical(f"Network failure during execution: {e}")
+            raise
+        except Exception as e:
+            self.logger.exception(f"Unexpected system failure: {e}")
+            return None
 
-    return logger
-
-if __name__ == "__main__":
-    log = setup_logger('automation-tool-96')
-    log.info("Logger initialization complete")
+    def log_event(self, message: str, level: str = "info"):
+        """Routes messages to appropriate log levels."""
+        levels = {
+            "info": self.logger.info,
+            "warning": self.logger.warning,
+            "error": self.logger.error
+        }
+        log_func = levels.get(level.lower(), self.logger.info)
+        log_func(message)
